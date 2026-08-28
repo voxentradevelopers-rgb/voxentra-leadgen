@@ -1,0 +1,23 @@
+{
+  "campaigns": [
+    {
+      "niche": "shopify-developer",
+      "keywords": [
+        "looking for a shopify developer",
+        "need shopify help",
+        "need a shopify developer"
+      ],
+      "negativeKeywords": ["hiring", "job posting", "salary"],
+      "location": "Rawalpindi"
+    },
+    {
+      "niche": "web-developer",
+      "keywords": [
+        "looking for a web developer",
+        "need a website built"
+      ],
+      "negativeKeywords": ["hiring", "job posting", "internship"],
+      "location": ""
+    }
+  ]
+}

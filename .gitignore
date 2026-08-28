@@ -1,0 +1,14 @@
+# Never commit these — credentials and secrets
+credentials.json
+
+# Dependencies — reinstalled via package.json, no need to commit
+node_modules/
+
+# Local scraped output — regenerated each run, not needed in the repo
+results-*.json
+clean-*.json
+scored-*.json
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
