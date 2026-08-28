@@ -10,7 +10,7 @@ const { getRandomUserAgent, randomDelay, getLaunchOptions } = require('./utils/s
 const { normalizePostLead } = require('./utils/normalize');
 const { dedupPostLeads } = require('./utils/dedup');
 const { scorePostLead } = require('./utils/scoring');
-const { writePostLeads, getExistingPostUrls } = require('./utils/sheets-writer');
+const { writePostLeads, getExistingPostUrls, writeRunLog } = require('./utils/sheets-writer');
 
 const MAX_RETRIES = 3;
 
@@ -78,71 +78,95 @@ async function scrapeWithRetry(query) {
 }
 
 (async () => {
-  console.log('=== Step 1: Scraping ===');
-  const config = loadConfig();
-  const scrapedResults = [];
+  let totalScraped = 0;
+  let afterFiltering = 0;
+  let errorMessage = '';
 
-  for (const campaign of config.campaigns) {
-    console.log(`\nCampaign: ${campaign.niche}`);
+  try {
+    console.log('=== Step 1: Scraping ===');
+    const config = loadConfig();
+    const scrapedResults = [];
 
-    for (const keyword of campaign.keywords) {
-      const fullQuery = campaign.location ? `"${keyword}" ${campaign.location}` : `"${keyword}"`;
-      const rawResults = await scrapeWithRetry(fullQuery);
+    for (const campaign of config.campaigns) {
+      console.log(`\nCampaign: ${campaign.niche}`);
 
-      for (const result of rawResults) {
-        if (containsNegativeKeyword(result.snippet, campaign.negativeKeywords)) {
-          console.log(`  Skipped (negative keyword): ${result.title}`);
-          continue;
+      for (const keyword of campaign.keywords) {
+        const fullQuery = campaign.location ? `"${keyword}" ${campaign.location}` : `"${keyword}"`;
+        const rawResults = await scrapeWithRetry(fullQuery);
+
+        for (const result of rawResults) {
+          if (containsNegativeKeyword(result.snippet, campaign.negativeKeywords)) {
+            console.log(`  Skipped (negative keyword): ${result.title}`);
+            continue;
+          }
+
+          let cleanUrl = result.url;
+          if (cleanUrl && cleanUrl.includes('uddg=')) {
+            const match = cleanUrl.match(/uddg=([^&]+)/);
+            if (match) cleanUrl = decodeURIComponent(match[1]);
+          }
+
+          scrapedResults.push({
+            dateFound: new Date().toISOString(),
+            niche: campaign.niche,
+            location: campaign.location,
+            keywordMatched: keyword,
+            title: result.title,
+            url: cleanUrl,
+            snippet: result.snippet,
+            email: extractEmail(result.snippet),
+            phone: extractPhone(result.snippet),
+          });
         }
 
-        let cleanUrl = result.url;
-        if (cleanUrl && cleanUrl.includes('uddg=')) {
-          const match = cleanUrl.match(/uddg=([^&]+)/);
-          if (match) cleanUrl = decodeURIComponent(match[1]);
-        }
-
-        scrapedResults.push({
-          dateFound: new Date().toISOString(),
-          niche: campaign.niche,
-          location: campaign.location,
-          keywordMatched: keyword,
-          title: result.title,
-          url: cleanUrl,
-          snippet: result.snippet,
-          email: extractEmail(result.snippet),
-          phone: extractPhone(result.snippet),
-        });
+        await randomDelay(3000, 6000);
       }
-
-      await randomDelay(3000, 6000);
     }
+
+    totalScraped = scrapedResults.length;
+    console.log(`\nTotal scraped: ${totalScraped}`);
+
+    console.log('\n=== Step 2: Normalize + Dedup (within-run) ===');
+    const normalized = scrapedResults.map(normalizePostLead);
+    const dedupedWithinRun = dedupPostLeads(normalized);
+    console.log(`After within-run dedup: ${dedupedWithinRun.length} (removed ${normalized.length - dedupedWithinRun.length})`);
+
+    console.log('\n=== Step 3: Dedup against existing Sheet data ===');
+    const existingUrls = await getExistingPostUrls();
+    console.log(`Found ${existingUrls.size} existing URLs already in the Sheet.`);
+
+    const genuinelyNewLeads = dedupedWithinRun.filter((lead) => !existingUrls.has(lead.postUrl));
+    afterFiltering = genuinelyNewLeads.length;
+    console.log(`Genuinely new leads (not already in Sheet): ${afterFiltering}`);
+
+    if (genuinelyNewLeads.length > 0) {
+      console.log('\n=== Step 4: Scoring ===');
+      const scoredLeads = genuinelyNewLeads.map(scorePostLead);
+
+      console.log('\n=== Step 5: Writing to Sheet ===');
+      const writtenCount = await writePostLeads(scoredLeads);
+      console.log(`Wrote ${writtenCount} new rows to "Post-Intent Leads" tab.`);
+    } else {
+      console.log('\nNothing new to add.');
+    }
+
+    console.log('\nDone.');
+  } catch (err) {
+    errorMessage = err.message;
+    console.error('\nPipeline failed:', err.message);
   }
 
-  console.log(`\nTotal scraped: ${scrapedResults.length}`);
-
-  console.log('\n=== Step 2: Normalize + Dedup (within-run) ===');
-  const normalized = scrapedResults.map(normalizePostLead);
-  const dedupedWithinRun = dedupPostLeads(normalized);
-  console.log(`After within-run dedup: ${dedupedWithinRun.length} (removed ${normalized.length - dedupedWithinRun.length})`);
-
-  console.log('\n=== Step 3: Dedup against existing Sheet data ===');
-  const existingUrls = await getExistingPostUrls();
-  console.log(`Found ${existingUrls.size} existing URLs already in the Sheet.`);
-
-  const genuinelyNewLeads = dedupedWithinRun.filter((lead) => !existingUrls.has(lead.postUrl));
-  console.log(`Genuinely new leads (not already in Sheet): ${genuinelyNewLeads.length}`);
-
-  if (genuinelyNewLeads.length === 0) {
-    console.log('\nNothing new to add. Done.');
-    return;
+  try {
+    await writeRunLog({
+      timestamp: new Date().toISOString(),
+      scrapeType: 'post-intent',
+      keywordUsed: 'multiple (see config/keywords.json)',
+      resultsFound: totalScraped,
+      resultsAfterFiltering: afterFiltering,
+      duplicatesSkipped: totalScraped - afterFiltering,
+      errors: errorMessage,
+    });
+  } catch (logErr) {
+    console.error('Also failed to write run log:', logErr.message);
   }
-
-  console.log('\n=== Step 4: Scoring ===');
-  const scoredLeads = genuinelyNewLeads.map(scorePostLead);
-
-  console.log('\n=== Step 5: Writing to Sheet ===');
-  const writtenCount = await writePostLeads(scoredLeads);
-  console.log(`Wrote ${writtenCount} new rows to "Post-Intent Leads" tab.`);
-
-  console.log('\nDone.');
 })();

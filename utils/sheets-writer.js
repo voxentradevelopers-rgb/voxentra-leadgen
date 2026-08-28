@@ -9,8 +9,6 @@ const fs = require('fs');
 const CREDENTIALS_PATH = './credentials.json';
 const SHEET_CONFIG_PATH = './config/sheet-config.json';
 
-// Column order MUST match the header row you typed into each tab manually.
-// If you reorder columns in the Sheet, update these arrays to match.
 const POST_LEADS_COLUMNS = [
   'dateFound', 'platform', 'postUrl', 'posterHandle', 'postSnippet',
   'keywordMatched', 'niche', 'location', 'email', 'phone',
@@ -38,14 +36,6 @@ function getSheetId() {
   return config.sheetId;
 }
 
-// Converts an array of lead objects into an array of arrays (rows), in the
-// exact column order defined above. Missing fields become empty strings
-// rather than "null" text, which looks cleaner in the Sheet.
-//
-// IMPORTANT: any value starting with +, -, or = gets a leading apostrophe
-// added. Without this, Google Sheets tries to interpret values like
-// "+92 300 1234567" as the start of a formula and throws a #ERROR! —
-// the apostrophe forces Sheets to treat it as plain text instead.
 function forceTextIfNeeded(value) {
   const str = String(value);
   if (str.startsWith('+') || str.startsWith('-') || str.startsWith('=')) {
@@ -70,7 +60,7 @@ async function appendRows(tabName, rows) {
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: sheetId,
-    range: `${tabName}!A1`, // A1 = "start looking from the top of the sheet", append adds after existing data
+    range: `${tabName}!A1`,
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values: rows },
@@ -89,29 +79,22 @@ async function writeMapsLeads(leads) {
   return rows.length;
 }
 
-// ---------- READING EXISTING DATA (for cross-run dedup) ----------
-
-// Reads all existing "Post URL" values already in the Sheet, so we can
-// skip re-adding a lead we've already saved in a previous run.
-// Post URL is column C (index 2) per POST_LEADS_COLUMNS order.
 async function getExistingPostUrls() {
   const sheets = getSheetsClient();
   const sheetId = getSheetId();
 
   const postUrlColumnIndex = POST_LEADS_COLUMNS.indexOf('postUrl');
-  const columnLetter = String.fromCharCode(65 + postUrlColumnIndex); // A=0 -> 'A', C=2 -> 'C', etc.
+  const columnLetter = String.fromCharCode(65 + postUrlColumnIndex);
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
-    range: `Post-Intent Leads!${columnLetter}2:${columnLetter}`, // row 2 onward, skip header
+    range: `Post-Intent Leads!${columnLetter}2:${columnLetter}`,
   });
 
   const values = response.data.values || [];
   return new Set(values.map((row) => row[0]).filter(Boolean));
 }
 
-// Reads existing "Business Name" + "Address" pairs already in the Sheet,
-// so we can skip re-adding a Maps lead we've already saved before.
 async function getExistingMapsKeys() {
   const sheets = getSheetsClient();
   const sheetId = getSheetId();
@@ -121,7 +104,6 @@ async function getExistingMapsKeys() {
   const nameLetter = String.fromCharCode(65 + nameIndex);
   const addressLetter = String.fromCharCode(65 + addressIndex);
 
-  // Fetch the full row range covering both columns (assumes name comes before address)
   const startLetter = nameIndex < addressIndex ? nameLetter : addressLetter;
   const endLetter = nameIndex < addressIndex ? addressLetter : nameLetter;
 
@@ -142,9 +124,24 @@ async function getExistingMapsKeys() {
   return keys;
 }
 
+async function writeRunLog(logEntry) {
+  const row = [
+    logEntry.timestamp || new Date().toISOString(),
+    logEntry.scrapeType || '',
+    logEntry.keywordUsed || '',
+    logEntry.resultsFound ?? '',
+    logEntry.resultsAfterFiltering ?? '',
+    logEntry.duplicatesSkipped ?? '',
+    logEntry.errors || '',
+  ];
+
+  await appendRows('Run Log', [row]);
+}
+
 module.exports = {
   writePostLeads,
   writeMapsLeads,
   getExistingPostUrls,
   getExistingMapsKeys,
+  writeRunLog,
 };
