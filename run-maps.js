@@ -4,7 +4,7 @@
 // Run with: node run-maps.js
 
 const { chromium } = require('playwright');
-const { getRandomUserAgent, randomDelay } = require('./utils/stealth-helpers');
+const { getRandomUserAgent, randomDelay, getLaunchOptions } = require('./utils/stealth-helpers');
 const { normalizeMapsLead } = require('./utils/normalize');
 const { dedupMapsLeads } = require('./utils/dedup');
 const { scoreMapsLead } = require('./utils/scoring');
@@ -17,7 +17,7 @@ const MAX_LISTINGS_TO_PROCESS = 8;
   console.log('=== Step 1: Scraping Google Maps ===');
   console.log(`Searching for: ${SEARCH_QUERY}`);
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch(getLaunchOptions());
   const userAgent = getRandomUserAgent();
   const context = await browser.newContext({ userAgent });
   const page = await context.newPage();
