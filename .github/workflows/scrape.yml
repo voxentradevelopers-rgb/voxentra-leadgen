@@ -1,0 +1,39 @@
+name: Voxentra Lead Gen Scrape
+
+# Two ways to trigger this workflow:
+# 1. schedule - runs automatically every 6 hours
+# 2. workflow_dispatch - lets you trigger it manually from GitHub's Actions tab (useful for testing)
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours, at minute 0
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Recreate credentials.json from the GitHub Secret, since the real
+      # file is gitignored and never exists in the repo itself
+      - name: Write Google credentials file
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
+
+      - name: Run post-intent scraper
+        run: node run-post-intent.js
+
+      - name: Run Maps scraper
+        run: node run-maps.js
