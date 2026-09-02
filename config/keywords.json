@@ -7,7 +7,11 @@
         "need shopify help",
         "need a shopify developer"
       ],
-      "negativeKeywords": ["hiring", "job posting", "salary"],
+      "negativeKeywords": [
+        "hiring",
+        "job posting",
+        "salary"
+      ],
       "location": "Rawalpindi"
     },
     {
@@ -16,8 +20,22 @@
         "looking for a web developer",
         "need a website built"
       ],
-      "negativeKeywords": ["hiring", "job posting", "internship"],
+      "negativeKeywords": [
+        "hiring",
+        "job posting",
+        "internship"
+      ],
       "location": ""
+    },
+    {
+      "niche": "Graphic Designer",
+      "keywords": [
+        "looking for a graphic designer"
+      ],
+      "negativeKeywords": [
+        "video editor"
+      ],
+      "location": "Berlin"
     }
   ]
 }
