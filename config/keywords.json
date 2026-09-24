@@ -36,6 +36,14 @@
         "video editor"
       ],
       "location": "Berlin"
+    },
+    {
+      "niche": "Web  Development",
+      "keywords": [
+        "looking for a web developer"
+      ],
+      "negativeKeywords": [],
+      "location": "USA"
     }
   ]
 }
